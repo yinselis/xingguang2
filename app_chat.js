@@ -1009,6 +1009,13 @@ else document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', 
     }
 }
 
+const innerVoiceMatch = cleanText.match(/\[心声[:：]\s*([\s\S]*?)\]/i);
+let innerVoiceText = null;
+if (innerVoiceMatch) {
+    innerVoiceText = innerVoiceMatch[1].trim();
+    cleanText = cleanText.replace(/\[心声[:：]\s*[\s\S]*?\]/i, '').trim();
+}
+
 const quoteMatch = cleanText.match(/\[QUOTE:(.*?)\]([\s\S]*)/i);
 if (quoteMatch) {
     quoteText = quoteMatch[1].trim();
@@ -1042,6 +1049,7 @@ history.push({
     locationName: locName, 
     quoteText: quoteText, 
     proposedName: proposedName, 
+    innerVoice: innerVoiceText,
     timestamp: ts 
 });
 await saveToDB(`chat_history_${contactId}`, history);
@@ -1406,7 +1414,13 @@ if (stickerRules.length > 0) {
         });
     }
 
-    const bilingualText = settings.bilingual ? `\n8. 【最高强制指令 - 翻译思维链】：每次输出前，请先在内部逻辑中执行“语言属性检测”：1. 确认即将输出的句子是否包含英语、日语、粤语等非普通话。2. 若包含，必须在含有外语/方言的句末，附加严格格式的翻译。格式必须且只能是：[译: 标准普通话翻译]。严禁自创格式（如(翻译: xxx)、[EN: xxx]）！示例：What a beautiful day! [译: 今天天气真不错！]` : '';
+    let innerVoiceText = '';
+if (settings.innerVoice) {
+    const customPrompt = settings.innerVoicePrompt || '请写出你此刻最真实、未经修饰的内心想法，包含表层情绪和深层顾虑。';
+    innerVoiceText = `\n【心声系统】：在生成气泡回复之前，发言角色必须单独在最前面用 [心声: xxx] 的格式输出其内心独白。要求：${customPrompt}`;
+}
+
+const bilingualText = settings.bilingual ? `\n8. 【最高强制指令 - 翻译思维链】：每次输出前，请先在内部逻辑中执行“语言属性检测”：1. 确认即将输出的句子是否包含英语、日语、粤语等非普通话。2. 若包含，必须在含有外语/方言的句末，附加严格格式的翻译。格式必须且只能是：[译: 标准普通话翻译]。严禁自创格式（如(翻译: xxx)、[EN: xxx]）！示例：What a beautiful day! [译: 今天天气真不错！]` : '';
 
     // ==== 新增修复：让群聊也能读取自动总结的记忆，并开启关键词雷达 ====
     const allMemories = await loadFromDB(`chat_memories_${contactId}`) || [];
@@ -1451,7 +1465,7 @@ ${replyCountText.replace(/^\d+\.\s*/, '')}
 6. 若角色的性格和当前情绪决定了ta要禁言某人（且ta拥有群主/管理员权限），单起一行输出：[禁言:对方名字:秒数]理由。【警告：必须根据角色的愤怒/开玩笑程度，亲自决定具体秒数(如300, 3600, 86400等，永久填0)】。只能禁言下级普通群员。
 7. 绝对不要使用 JSON！严格遵守纯文本格式输出：
    - 每一个独立的气泡之间必须用 === 分隔。
-   - 每一个气泡的第一行必须是你指定的发言人的名字，用中括号括起来，例如：[张三]。第二行开始是正文内容。${bilingualText}
+   - 每一个气泡的第一行必须是你指定的发言人的名字，用中括号括起来，例如：[张三]。第二行开始是正文内容。${innerVoiceText}${bilingualText}
 ${backCmdText}`;
 
 // 改造 1：不要直接 join 成纯文本，而是组装成多模态支持的数组
@@ -1637,6 +1651,13 @@ else document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', 
     }
 }
 
+const innerVoiceMatch = cleanText.match(/\[心声[:：]\s*([\s\S]*?)\]/i);
+let innerVoiceText = null;
+if (innerVoiceMatch) {
+    innerVoiceText = innerVoiceMatch[1].trim();
+    cleanText = cleanText.replace(/\[心声[:：]\s*[\s\S]*?\]/i, '').trim();
+}
+
 const quoteMatch = cleanText.match(/\[QUOTE:(.*?)\]([\s\S]*)/i);
             if (quoteMatch) { quoteText = quoteMatch[1].trim(); cleanText = quoteMatch[2].trim(); }
 
@@ -1656,7 +1677,7 @@ else if (cleanText.includes('[日记提议:')) {
 }
 
             const ts = Date.now() + i; 
-            history.push({ role: 'assistant', speakerId: speakerInfo ? speakerInfo.id : undefined, speakerName: speakerName ? speakerName : undefined, content: cleanText, msgType: msgType, voiceDuration: voiceDur, rpAmount: rpAmt, locationName: locName, quoteText: quoteText, proposedName: proposedName, timestamp: ts });
+history.push({ role: 'assistant', speakerId: speakerInfo ? speakerInfo.id : undefined, speakerName: speakerName ? speakerName : undefined, content: cleanText, msgType: msgType, voiceDuration: voiceDur, rpAmount: rpAmt, locationName: locName, quoteText: quoteText, proposedName: proposedName, innerVoice: innerVoiceText, timestamp: ts });
             await saveToDB(`chat_history_${contactId}`, history);
 
             let aiAvatarUrl = diaryAvatarCache[speakerInfo.id];
@@ -2083,6 +2104,10 @@ ${replyCountText}${bilingualText}${backCmdText}`;
 // 监听自动总结开关，开启时展示填空框
 document.getElementById('chatAutoSummaryToggle').addEventListener('change', function(e) {
     document.getElementById('chatAutoSummarySettings').style.display = e.target.checked ? 'block' : 'none';
+});
+
+document.getElementById('chatInnerVoiceToggle').addEventListener('change', function(e) {
+    document.getElementById('chatInnerVoiceSettings').style.display = e.target.checked ? 'block' : 'none';
 });
 
 // === 双输入框专用弹窗 (语音/红包发送) ===
@@ -2759,8 +2784,12 @@ document.getElementById('groupProfileMemberCount').innerText = `群聊成员 (${
     styleTag.innerHTML = settings.customCss || '';
     document.getElementById('chatReplyCount').value = settings.replyCount || '';
         document.getElementById('chatAutoSummaryToggle').checked = settings.autoSummary || false;
-    document.getElementById('chatSummaryMessages').value = settings.summaryMessages || '';
-    document.getElementById('chatAutoSummarySettings').style.display = settings.autoSummary ? 'block' : 'none';
+document.getElementById('chatSummaryMessages').value = settings.summaryMessages || '';
+document.getElementById('chatAutoSummarySettings').style.display = settings.autoSummary ? 'block' : 'none';
+
+document.getElementById('chatInnerVoiceToggle').checked = settings.innerVoice || false;
+document.getElementById('chatInnerVoicePrompt').value = settings.innerVoicePrompt || '';
+document.getElementById('chatInnerVoiceSettings').style.display = settings.innerVoice ? 'block' : 'none';
     document.getElementById('chatContextCount').value = settings.contextCount || '';
     document.getElementById('chatSettingsTaNote').value = currentChatContact.name || '';
     
@@ -2929,10 +2958,12 @@ document.getElementById('saveChatSettingsBtn').addEventListener('click', async (
         replyCount: document.getElementById('chatReplyCount').value.trim(),
         contextCount: parseInt(document.getElementById('chatContextCount').value) || 15,
         autoSummary: document.getElementById('chatAutoSummaryToggle').checked,
-        summaryMessages: parseInt(document.getElementById('chatSummaryMessages').value) || 30,
-        hideQuickBar: !document.getElementById('chatQuickBarToggle').checked,
-        bilingual: document.getElementById('chatBilingualToggle').checked
-    };
+    summaryMessages: parseInt(document.getElementById('chatSummaryMessages').value) || 30,
+    innerVoice: document.getElementById('chatInnerVoiceToggle').checked,
+    innerVoicePrompt: document.getElementById('chatInnerVoicePrompt').value.trim(),
+    hideQuickBar: !document.getElementById('chatQuickBarToggle').checked,
+    bilingual: document.getElementById('chatBilingualToggle').checked
+};
 
     await saveToDB(`chat_settings_${currentChatContact.id}`, settings);
 applyChatCustomCss(settings.customCss); // 立即生效 CSS
@@ -3055,7 +3086,12 @@ const memoryText = (activeMemories.length > 0 || awakenedMemories.length > 0)
         });
     }
     const bilingualText = settings.bilingual ? `\n8. 【最高强制指令 - 翻译思维链】：每次输出前，请先在内部逻辑中执行“语言属性检测”：1. 确认即将输出的句子是否包含英语、日语、粤语等非普通话。2. 若包含，必须在含有外语/方言的句末，附加严格格式的翻译。格式必须且只能是：[译: 标准普通话翻译]。严禁自创格式（如(翻译: xxx)、[EN: xxx]）！示例：What a beautiful day! [译: 今天天气真不错！]` : '';
-    let replyCountText = '';
+let innerVoiceText = '';
+if (settings.innerVoice) {
+    const customPrompt = settings.innerVoicePrompt || '请写出你此刻最真实、未经修饰的内心想法，包含表层情绪和深层顾虑。';
+    innerVoiceText = `\n【心声系统】：在生成气泡回复之前，你必须单独在最前面用 [心声: xxx] 的格式输出你的内心独白。要求：${customPrompt}`;
+}
+let replyCountText = '';
 const rCount = settings.replyCount || '';
 if (rCount === '') {
     replyCountText = `\n7. 【强制气泡分割规则】：为了模拟真实的微信连续多条短消息，**你说的每一句话、每一个动作都必须单起一行，并且开头必须加上 [气泡] 两个字！** \n示例：\n[气泡]你在干嘛呢？\n[气泡]我今天好累哦\n[气泡]*伸了个懒腰*\n绝对禁止把所有话连在一起写成一大段！`;
@@ -3126,7 +3162,7 @@ if (aiStickers.length > 0) {
 5. 我们正在进行日常的跨频段文字聊天。我们有无法逾越的物理距离，你深刻意识到我们无法直接见面。
 6. 绝对禁止使用任何环境描写、心理活动或动作描写（严禁使用括号()、星号**等标出动作神态）。你的所有情绪张力、潜台词，都必须通过纯粹的对白文字、语气词、停顿（...）和标点符号来体现！
 7. 绝不许动不动就撩拨、调情、邪魅一笑或说油腻语录。遵守你的人物核心性格，决定语气、节奏、停顿如何把握。是否会主动寻找话题，是否会有弱势或缺陷，避免过度强调。遵守角色，决定是否应更从容和有松弛感，是否需要留白。
-8. 想发语音格式：[VOICE:秒数]文字。发送图片格式：[图片:图片画面的详细描述]。日记邀请格式：[DIARY_INVITE:附言] (同意回[日记同意]，拒绝回[日记拒绝])。发红包：[REDPACKET:金额]留言。发定位：[LOCATION:地点]留言。极低概率下，想对对方做肢体动作，单起一行：[POKE:动作描述] (如: [POKE:捏了捏你的脸颊])，严禁频繁使用！引用回复格式：[QUOTE:原话]你的回复。
+8. 想发语音格式：[VOICE:秒数]文字。发送图片格式：[图片:图片画面的详细描述]。日记邀请格式：[DIARY_INVITE:附言] (同意回[日记同意]，拒绝回[日记拒绝])。发红包：[REDPACKET:金额]留言。发定位：[LOCATION:地点]留言。极低概率下，想对对方做肢体动作，单起一行：[POKE:动作描述] (如: [POKE:捏了捏你的脸颊])，严禁频繁使用！引用回复格式：[QUOTE:原话]你的回复。${innerVoiceText}
 ${replyCountText}${bilingualText}${backCmdText}`;
 }
 
@@ -3417,6 +3453,8 @@ chatMessageArea.addEventListener('touchstart', (e) => {
     const bubbleRow = e.target.closest('.chat-bubble-row, .chat-system-msg[data-ts]');
     if (!bubbleRow || bubbleRow.id === 'chatLoadingBubble') return;
     
+    const avatarEl = e.target.closest('.chat-bubble-avatar'); // 捕获头像
+    
     if (pressTimer) clearTimeout(pressTimer); // 修复多指边缘误触导致定时器丢失的 Bug
     
     touchStartX = e.touches[0].clientX;
@@ -3424,7 +3462,11 @@ chatMessageArea.addEventListener('touchstart', (e) => {
     
     pressTimer = setTimeout(() => { 
         pressTimer = null;
-        showBubbleMenu(bubbleRow, e.touches[0]); 
+        if (avatarEl && bubbleRow.classList.contains('ai')) {
+            showInnerVoice(bubbleRow, avatarEl);
+        } else {
+            showBubbleMenu(bubbleRow, e.touches[0]); 
+        }
     }, 550);
 }, {passive: true});
 
@@ -3445,7 +3487,46 @@ chatMessageArea.addEventListener('scroll', () => { if(pressTimer) { clearTimeout
 
 chatMessageArea.addEventListener('contextmenu', (e) => { 
     const bubbleRow = e.target.closest('.chat-bubble-row, .chat-system-msg[data-ts]');
-    if (bubbleRow && !bubbleRow.id.includes('Loading')) { e.preventDefault(); showBubbleMenu(bubbleRow, e); }
+    const avatarEl = e.target.closest('.chat-bubble-avatar');
+    if (bubbleRow && !bubbleRow.id.includes('Loading')) { 
+        e.preventDefault(); 
+        if (avatarEl && bubbleRow.classList.contains('ai')) {
+            showInnerVoice(bubbleRow, avatarEl);
+        } else {
+            showBubbleMenu(bubbleRow, e); 
+        }
+    }
+});
+
+// ====== 显示角色心声弹窗 ======
+window.showInnerVoice = async function(bubbleRow, avatarEl) {
+    const ts = parseInt(bubbleRow.dataset.ts);
+    if (!ts || !currentChatContact) return;
+
+    let history = await loadFromDB(`chat_history_${currentChatContact.id}`) || [];
+    const msg = history.find(m => m.timestamp === ts);
+    if (!msg) return;
+
+    const innerVoiceModal = document.getElementById('innerVoiceModal');
+    const avatarBg = avatarEl.style.backgroundImage || avatarEl.style.backgroundColor;
+    document.getElementById('innerVoiceAvatar').style.background = avatarBg;
+    
+    let name = document.getElementById('chatRoomTitle').innerText || 'TA';
+    if (msg.speakerName) name = msg.speakerName;
+    document.getElementById('innerVoiceName').innerText = name + ' 的心声';
+
+    const contentEl = document.getElementById('innerVoiceContent');
+    if (msg.innerVoice) {
+        contentEl.innerHTML = `<span style="color:var(--text-sub); font-size:12px; font-style:normal;">[当时所思]</span><br><br>${msg.innerVoice}`;
+    } else {
+        contentEl.innerHTML = `<span style="color:var(--text-sub); font-style:italic;">(TA 此刻的心湖一片平静，未截获任何心声...)</span>`;
+    }
+
+    innerVoiceModal.classList.add('show');
+};
+
+document.getElementById('closeInnerVoiceBtn')?.addEventListener('click', () => {
+    document.getElementById('innerVoiceModal').classList.remove('show');
 });
 
 // 2. 呼出菜单
