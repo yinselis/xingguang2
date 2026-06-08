@@ -764,25 +764,20 @@ const data = await response.json();
 let reply = data.choices[0].message.content.trim();
 reply = reply.replace(/\[\d{1,2}月\d{1,2}日 \d{1,2}:\d{2}\]\s*/g, '');
 
-// === 新增：全局提取当轮心声（保证所有切分出的气泡都能共享） ===
-let turnInnerVoice = null;
-const globalVoiceMatch = reply.match(/\[心声[:：]\s*([\s\S]*?)\]/i);
-if (globalVoiceMatch) {
-    turnInnerVoice = globalVoiceMatch[1].trim();
-    reply = reply.replace(/\[心声[:：]\s*[\s\S]*?\]/i, '').trim();
-}
+// 移除群聊不合理的全局心声提取，改为针对每个人的专属心声字典
+let personInnerVoices = {};
 
 const initialBubbles = reply.split(/===+/).map(b => b.trim()).filter(b => b);
 const bubbles = [];
 initialBubbles.forEach(b => {
     let text = b;
-    let name = '神秘群员';
+    let currentName = '神秘群员';
     
     // 匹配真正的发言人名字
     let nameMatch = text.match(/^\[(.*?)\]/);
     if (nameMatch) {
-        name = nameMatch[1].trim();
-        // 终极修复：把开头所有幻觉产生的连环名字标签全部剔除，例如 [Hesh]\n[Merrick]
+        currentName = nameMatch[1].trim();
+        // 终极修复：把开头所有幻觉产生的连环名字标签全部剔除
         text = text.replace(/^(?:\[.*?\]\s*)+/, '').trim();
     }
     
@@ -792,9 +787,26 @@ initialBubbles.forEach(b => {
     text = text.replace(/\n+\s*(\[(?:译|翻译|EN|En|Eng)[:：].*?\])/gi, ' $1');
 
     text.split('\n').map(l => l.trim()).filter(l => l).forEach(line => {
-        // 如果这一行仅仅是一个无意义的名字标签（比如AI神经错乱输出了孤立的 [Hesh]），直接抛弃，防止出现空心气泡
-        if (line.match(/^\[.*?\]$/)) return;
-        bubbles.push(`[${name}]\n${line}`);
+        // 【核心修复】：如果遇到了单纯的名字标签换行，更新当前说话的人，并跳过避免生成空泡
+        let lineNameMatch = line.match(/^\[(.*?)\]$/);
+        if (lineNameMatch) {
+            currentName = lineNameMatch[1].trim();
+            return; 
+        }
+
+        // 【核心修复】：如果模型没换行直接吐出了 "[Logan] 你会完蛋的" 格式
+        let inlineNameMatch = line.match(/^\[(.*?)\]\s*(.*)/);
+        if (inlineNameMatch && inlineNameMatch[1] && inlineNameMatch[2]) {
+            const tag = inlineNameMatch[1].trim();
+            const excludeTags = ['QUOTE', 'LOCATION', 'REDPACKET', 'VOICE', 'DIARY_INVITE', 'POKE', '禁言', '图片', '表情包', '心声', '译', '翻译', 'EN', 'En', 'Eng'];
+            // 如果不是功能性标签，说明它是发言人名字，那就更新它
+            if (!excludeTags.includes(tag.toUpperCase())) {
+                currentName = tag;
+                line = inlineNameMatch[2].trim();
+            }
+        }
+
+        bubbles.push(`[${currentName}]\n${line}`);
     });
 });
 
@@ -840,6 +852,14 @@ let rpAmt = 0;
 let locName = '';
 let cleanText = rawContent;
 let quoteText = null;
+
+// ★ 修复：群聊中分别提取每个人独立的心声，并剥离出文本
+const localVoiceMatch = cleanText.match(/\[心声[:：]\s*([\s\S]*?)\]/i);
+if (localVoiceMatch) {
+    personInnerVoices[speakerName] = localVoiceMatch[1].trim();
+    cleanText = cleanText.replace(/\[心声[:：]\s*[\s\S]*?\]/i, '').trim();
+}
+let turnInnerVoice = personInnerVoices[speakerName] || null;
 
 // 解析 AI 发出的禁言动作
 let isSpeakerAdmin = (contactInfo.owner === speakerInfo.id) || (contactInfo.admins && contactInfo.admins.includes(speakerInfo.id));
