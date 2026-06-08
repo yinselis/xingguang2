@@ -1683,7 +1683,15 @@ document.getElementById('chatAutoSummarySettings').style.display = settings.auto
 
 document.getElementById('chatInnerVoiceToggle').checked = settings.innerVoice || false;
 document.getElementById('chatInnerVoicePrompt').value = settings.innerVoicePrompt || '';
-document.getElementById('chatInnerVoiceSettings').style.display = settings.innerVoice ? 'block' : 'none';
+
+// 【核心修复】：如果是群聊，死死按住把它隐藏掉，绝不允许再次显示
+if (contactInfo && contactInfo.isGroup) {
+    document.getElementById('chatInnerVoiceToggle').parentElement.parentElement.style.display = 'none';
+    document.getElementById('chatInnerVoiceSettings').style.display = 'none';
+} else {
+    document.getElementById('chatInnerVoiceToggle').parentElement.parentElement.style.display = 'flex';
+    document.getElementById('chatInnerVoiceSettings').style.display = settings.innerVoice ? 'block' : 'none';
+}
     document.getElementById('chatContextCount').value = settings.contextCount || '';
     document.getElementById('chatSettingsTaNote').value = currentChatContact.name || '';
     
@@ -2398,9 +2406,14 @@ window.showInnerVoice = async function(bubbleRow, avatarEl) {
     if (!ts || !currentChatContact) return;
 
     // ★ 拦截器：如果是群聊，长按头像直接失效，绝不弹心声
-    let contacts = await loadFromDB('chat_contacts') || [];
-    let contactInfo = contacts.find(c => c.id === currentChatContact.id);
-    if (contactInfo && contactInfo.isGroup) return;
+let contacts = await loadFromDB('chat_contacts') || [];
+let contactInfo = contacts.find(c => c.id === currentChatContact.id);
+if (contactInfo && contactInfo.isGroup) {
+    // 群聊不弹心声，而是直接将它作为普通长按，呼出【撤回/多选】菜单
+    const rect = avatarEl.getBoundingClientRect();
+    showBubbleMenu(bubbleRow, { clientX: rect.right, clientY: rect.top });
+    return;
+}
 
     let history = await loadFromDB(`chat_history_${currentChatContact.id}`) || [];
     const msg = history.find(m => m.timestamp === ts);
