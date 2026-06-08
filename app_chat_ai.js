@@ -650,11 +650,7 @@ if (stickerRules.length > 0) {
         });
     }
 
-    let innerVoiceText = '';
-if (settings.innerVoice) {
-    const customPrompt = settings.innerVoicePrompt || '请写出你此刻最真实、未经修饰的内心想法，包含表层情绪和深层顾虑。';
-    innerVoiceText = `\n【心声系统】：在生成气泡回复之前，发言角色必须单独在最前面用 [心声: xxx] 的格式输出其内心独白。要求：${customPrompt}`;
-}
+let innerVoiceText = '';
 
 const bilingualText = settings.bilingual ? `\n8. 【最高强制指令 - 翻译思维链】：每次输出前，请先在内部逻辑中执行“语言属性检测”：1. 确认即将输出的句子是否包含英语、日语、粤语等非普通话。2. 若包含，必须在含有外语/方言的句末，附加严格格式的翻译。格式必须且只能是：[译: 标准普通话翻译]。严禁自创格式（如(翻译: xxx)、[EN: xxx]）！示例：What a beautiful day! [译: 今天天气真不错！]` : '';
 
@@ -872,13 +868,9 @@ let locName = '';
 let cleanText = rawContent;
 let quoteText = null;
 
-// ★ 修复：群聊中分别提取每个人独立的心声，并剥离出文本
-const localVoiceMatch = cleanText.match(/\[心声[:：]\s*([\s\S]*?)\]/i);
-if (localVoiceMatch) {
-    personInnerVoices[speakerName] = localVoiceMatch[1].trim();
-    cleanText = cleanText.replace(/\[心声[:：]\s*[\s\S]*?\]/i, '').trim();
-}
-let turnInnerVoice = personInnerVoices[speakerName] || null;
+// ★ 群聊物理剥离幻觉心声，绝不提取保存
+cleanText = cleanText.replace(/\[心声[:：]\s*[\s\S]*?\]/i, '').trim();
+let turnInnerVoice = null;
 
 // 解析 AI 发出的禁言动作
 let isSpeakerAdmin = (contactInfo.owner === speakerInfo.id) || (contactInfo.admins && contactInfo.admins.includes(speakerInfo.id));
