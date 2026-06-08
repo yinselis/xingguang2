@@ -2432,7 +2432,21 @@
     </div>
 </div>
 
-<script src="main.js"></script>
+    <!-- 引入拆分后的文件 -->
+    <script src="utils_db.js"></script>
+    <script src="desktop.js"></script>
+    <script src="app_others.js"></script>
+    <script src="app_diary_letter.js"></script>
+    <script src="app_chat.js"></script>
+
+    <!-- 所有文件加载完后再执行开机恢复，防止白屏 -->
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            if (typeof restoreEverything === 'function') {
+                restoreEverything();
+            }
+        });
+    </script>
 
 </body>
 </html>
