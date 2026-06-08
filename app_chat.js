@@ -1597,8 +1597,15 @@ document.getElementById('groupProfileMemberCount').innerText = `群聊成员 (${
         document.getElementById('singleChatDangerRow').style.display = 'none'; // 隐藏拉黑/删除
         document.getElementById('chatDisbandGroupBtn').style.display = 'block'; // 显示解散
 
-    } else {
-        document.getElementById('groupMembersBlock').style.display = 'none';
+    // ★ 群聊物理隐藏心声开关
+    document.getElementById('chatInnerVoiceToggle').parentElement.parentElement.style.display = 'none';
+    document.getElementById('chatInnerVoiceSettings').style.display = 'none';
+
+} else {
+    document.getElementById('groupMembersBlock').style.display = 'none';
+    
+    // ★ 单聊恢复显示心声开关
+    document.getElementById('chatInnerVoiceToggle').parentElement.parentElement.style.display = 'flex';
         
         // 危险操作区状态切换 (单聊模式)
         document.getElementById('chatClearHistoryBtn').innerText = "清空此人聊天记录";
@@ -2389,6 +2396,11 @@ chatMessageArea.addEventListener('contextmenu', (e) => {
 window.showInnerVoice = async function(bubbleRow, avatarEl) {
     const ts = parseInt(bubbleRow.dataset.ts);
     if (!ts || !currentChatContact) return;
+
+    // ★ 拦截器：如果是群聊，长按头像直接失效，绝不弹心声
+    let contacts = await loadFromDB('chat_contacts') || [];
+    let contactInfo = contacts.find(c => c.id === currentChatContact.id);
+    if (contactInfo && contactInfo.isGroup) return;
 
     let history = await loadFromDB(`chat_history_${currentChatContact.id}`) || [];
     const msg = history.find(m => m.timestamp === ts);
