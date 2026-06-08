@@ -901,6 +901,14 @@ if (data.usage) {
 let reply = data.choices[0].message.content.trim();
 reply = reply.replace(/\[\d{1,2}月\d{1,2}日 \d{1,2}:\d{2}\]\s*/g, '');
         
+// === 新增：全局提取当轮心声（保证所有切分出的气泡都能共享） ===
+let turnInnerVoice = null;
+const globalVoiceMatch = reply.match(/\[心声[:：]\s*([\s\S]*?)\]/i);
+if (globalVoiceMatch) {
+    turnInnerVoice = globalVoiceMatch[1].trim();
+    reply = reply.replace(/\[心声[:：]\s*[\s\S]*?\]/i, '').trim();
+}
+
 // === 终极防粘连切分逻辑 (完美兼容笨模型) ===
 const safeReply = reply.replace(/(\[(QUOTE|LOCATION|REDPACKET|VOICE|DIARY_INVITE):.*?\])\s*\n+/gi, '$1 ');
 
@@ -930,7 +938,8 @@ else {
 
 // 模拟真人发微信，根据字数动态延迟，一条一条连发！
 for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
+    let line = lines[i].replace(/\[气泡\]/g, '').trim(); // 清理残留标记
+    if (!line) continue; // 防止出现空心气泡
     
     // 除了第一条，后面的每条都要模拟打字延迟
     if (i > 0) {
@@ -1009,13 +1018,6 @@ else document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', 
     }
 }
 
-const innerVoiceMatch = cleanText.match(/\[心声[:：]\s*([\s\S]*?)\]/i);
-let innerVoiceText = null;
-if (innerVoiceMatch) {
-    innerVoiceText = innerVoiceMatch[1].trim();
-    cleanText = cleanText.replace(/\[心声[:：]\s*[\s\S]*?\]/i, '').trim();
-}
-
 const quoteMatch = cleanText.match(/\[QUOTE:(.*?)\]([\s\S]*)/i);
 if (quoteMatch) {
     quoteText = quoteMatch[1].trim();
@@ -1049,7 +1051,7 @@ history.push({
     locationName: locName, 
     quoteText: quoteText, 
     proposedName: proposedName, 
-    innerVoice: innerVoiceText,
+    innerVoice: turnInnerVoice,
     timestamp: ts 
 });
 await saveToDB(`chat_history_${contactId}`, history);
@@ -1524,25 +1526,40 @@ try {
 
         if (!response.ok) throw new Error("API 请求失败");
 
-        const data = await response.json();
-        let reply = data.choices[0].message.content.trim();
+const data = await response.json();
+let reply = data.choices[0].message.content.trim();
 reply = reply.replace(/\[\d{1,2}月\d{1,2}日 \d{1,2}:\d{2}\]\s*/g, '');
-        
-        const initialBubbles = reply.split('===').map(b => b.trim()).filter(b => b);
+
+// === 新增：全局提取当轮心声（保证所有切分出的气泡都能共享） ===
+let turnInnerVoice = null;
+const globalVoiceMatch = reply.match(/\[心声[:：]\s*([\s\S]*?)\]/i);
+if (globalVoiceMatch) {
+    turnInnerVoice = globalVoiceMatch[1].trim();
+    reply = reply.replace(/\[心声[:：]\s*[\s\S]*?\]/i, '').trim();
+}
+
+const initialBubbles = reply.split(/===+/).map(b => b.trim()).filter(b => b);
 const bubbles = [];
 initialBubbles.forEach(b => {
-    let nameMatch = b.match(/^\[(.*?)\]/);
-    let name = nameMatch ? nameMatch[1].trim() : '神秘群员';
-    let text = nameMatch ? b.replace(/^\[.*?\]\s*/, '').trim() : b;
+    let text = b;
+    let name = '神秘群员';
     
-    // === 新增修复：防止引用等功能框和正文被大模型的换行强行切断 ===
+    // 匹配真正的发言人名字
+    let nameMatch = text.match(/^\[(.*?)\]/);
+    if (nameMatch) {
+        name = nameMatch[1].trim();
+        // 终极修复：把开头所有幻觉产生的连环名字标签全部剔除，例如 [Hesh]\n[Merrick]
+        text = text.replace(/^(?:\[.*?\]\s*)+/, '').trim();
+    }
+    
+    // 防止引用等功能框被换行切断
     text = text.replace(/(\[(QUOTE|LOCATION|REDPACKET|VOICE|DIARY_INVITE):.*?\])\s*\n+/gi, '$1 ');
-
-    // ★ 核心修复：强行合并被大模型意外换行的双语翻译标签，防止它变成空壳孤儿气泡导致点击不生效！
+    // 强行合并双语翻译标签
     text = text.replace(/\n+\s*(\[(?:译|翻译|EN|En|Eng)[:：].*?\])/gi, ' $1');
 
-    // 强行把同一个人的回车换行，全部切成独立连发的连珠炮气泡！
     text.split('\n').map(l => l.trim()).filter(l => l).forEach(line => {
+        // 如果这一行仅仅是一个无意义的名字标签（比如AI神经错乱输出了孤立的 [Hesh]），直接抛弃，防止出现空心气泡
+        if (line.match(/^\[.*?\]$/)) return;
         bubbles.push(`[${name}]\n${line}`);
     });
 });
@@ -1651,13 +1668,6 @@ else document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', 
     }
 }
 
-const innerVoiceMatch = cleanText.match(/\[心声[:：]\s*([\s\S]*?)\]/i);
-let innerVoiceText = null;
-if (innerVoiceMatch) {
-    innerVoiceText = innerVoiceMatch[1].trim();
-    cleanText = cleanText.replace(/\[心声[:：]\s*[\s\S]*?\]/i, '').trim();
-}
-
 const quoteMatch = cleanText.match(/\[QUOTE:(.*?)\]([\s\S]*)/i);
             if (quoteMatch) { quoteText = quoteMatch[1].trim(); cleanText = quoteMatch[2].trim(); }
 
@@ -1677,7 +1687,7 @@ else if (cleanText.includes('[日记提议:')) {
 }
 
             const ts = Date.now() + i; 
-history.push({ role: 'assistant', speakerId: speakerInfo ? speakerInfo.id : undefined, speakerName: speakerName ? speakerName : undefined, content: cleanText, msgType: msgType, voiceDuration: voiceDur, rpAmount: rpAmt, locationName: locName, quoteText: quoteText, proposedName: proposedName, innerVoice: innerVoiceText, timestamp: ts });
+history.push({ role: 'assistant', speakerId: speakerInfo ? speakerInfo.id : undefined, speakerName: speakerName ? speakerName : undefined, content: cleanText, msgType: msgType, voiceDuration: voiceDur, rpAmount: rpAmt, locationName: locName, quoteText: quoteText, proposedName: proposedName, innerVoice: turnInnerVoice, timestamp: ts });
             await saveToDB(`chat_history_${contactId}`, history);
 
             let aiAvatarUrl = diaryAvatarCache[speakerInfo.id];
