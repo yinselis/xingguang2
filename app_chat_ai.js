@@ -767,6 +767,9 @@ reply = reply.replace(/\[\d{1,2}月\d{1,2}日 \d{1,2}:\d{2}\]\s*/g, '');
 // 移除群聊不合理的全局心声提取，改为针对每个人的专属心声字典
 let personInnerVoices = {};
 
+// ★ 终极防御：如果 AI 把 [心声: xxx] 写在了 [名字] 前面，强制把它们的位置换过来，保证名字永远在最顶上！
+reply = reply.replace(/(\[心声[:：][\s\S]*?\])\s*\n*\s*(\[[^\]:]+?\])/gi, '$2\n$1');
+
 const initialBubbles = reply.split(/===+/).map(b => b.trim()).filter(b => b);
 const bubbles = [];
 initialBubbles.forEach(b => {
@@ -776,9 +779,15 @@ initialBubbles.forEach(b => {
     // 匹配真正的发言人名字
     let nameMatch = text.match(/^\[(.*?)\]/);
     if (nameMatch) {
-        currentName = nameMatch[1].trim();
-        // 终极修复：把开头所有幻觉产生的连环名字标签全部剔除
-        text = text.replace(/^(?:\[.*?\]\s*)+/, '').trim();
+        let tag = nameMatch[1].trim();
+        let tagBase = tag.split(/[:：]/)[0].trim().toUpperCase();
+        const excludeTags = ['QUOTE', 'LOCATION', 'REDPACKET', 'VOICE', 'DIARY_INVITE', 'POKE', '禁言', '图片', '表情包', '心声', '译', '翻译', 'EN', 'ENG'];
+        // 只要不是标签，就当作是人名
+        if (!excludeTags.includes(tagBase)) {
+            currentName = tag;
+            // 剔除所有开头幻觉产生的连续纯名字标签，避免文本被吞
+            text = text.replace(/^(?:\[[^\]:]+\]\s*)+/, '').trim();
+        }
     }
     
     // 防止引用等功能框被换行切断
@@ -787,20 +796,30 @@ initialBubbles.forEach(b => {
     text = text.replace(/\n+\s*(\[(?:译|翻译|EN|En|Eng)[:：].*?\])/gi, ' $1');
 
     text.split('\n').map(l => l.trim()).filter(l => l).forEach(line => {
-        // 【核心修复】：如果遇到了单纯的名字标签换行，更新当前说话的人，并跳过避免生成空泡
+        let isNameTag = false;
+        
+        // 【核心修复】：判断这一行是不是单纯的名字标签换行
         let lineNameMatch = line.match(/^\[(.*?)\]$/);
         if (lineNameMatch) {
-            currentName = lineNameMatch[1].trim();
-            return; 
+            let tag = lineNameMatch[1].trim();
+            let tagBase = tag.split(/[:：]/)[0].trim().toUpperCase();
+            const excludeTags = ['QUOTE', 'LOCATION', 'REDPACKET', 'VOICE', 'DIARY_INVITE', 'POKE', '禁言', '图片', '表情包', '心声', '译', '翻译', 'EN', 'ENG'];
+            if (!excludeTags.includes(tagBase)) {
+                currentName = tag;
+                isNameTag = true;
+            }
         }
+        
+        if (isNameTag) return; // 是纯名字行的话直接跳过，避免生成空心气泡
 
-        // 【核心修复】：如果模型没换行直接吐出了 "[Logan] 你会完蛋的" 格式
+        // 【核心修复】：如果模型没换行直接连着输出了 "[Logan] 别雇他" 或 "[Logan] [心声: 烦躁] 别雇他"
         let inlineNameMatch = line.match(/^\[(.*?)\]\s*(.*)/);
         if (inlineNameMatch && inlineNameMatch[1] && inlineNameMatch[2]) {
-            const tag = inlineNameMatch[1].trim();
-            const excludeTags = ['QUOTE', 'LOCATION', 'REDPACKET', 'VOICE', 'DIARY_INVITE', 'POKE', '禁言', '图片', '表情包', '心声', '译', '翻译', 'EN', 'En', 'Eng'];
-            // 如果不是功能性标签，说明它是发言人名字，那就更新它
-            if (!excludeTags.includes(tag.toUpperCase())) {
+            let tag = inlineNameMatch[1].trim();
+            let tagBase = tag.split(/[:：]/)[0].trim().toUpperCase();
+            const excludeTags = ['QUOTE', 'LOCATION', 'REDPACKET', 'VOICE', 'DIARY_INVITE', 'POKE', '禁言', '图片', '表情包', '心声', '译', '翻译', 'EN', 'ENG'];
+            // 只有判断出这个方括号里确实是人名时，才更新说话人！
+            if (!excludeTags.includes(tagBase)) {
                 currentName = tag;
                 line = inlineNameMatch[2].trim();
             }
