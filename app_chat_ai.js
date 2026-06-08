@@ -872,11 +872,10 @@ let locName = '';
 let cleanText = rawContent;
 let quoteText = null;
 
-// ★ 修复：群聊中分别提取每个人独立的心声，并剥离出文本
+// ★ 修复：将心声存入数据后台，但不从正文中粗暴删除，保留它用于后续的优美UI渲染
 const localVoiceMatch = cleanText.match(/\[心声[:：]\s*([\s\S]*?)\]/i);
 if (localVoiceMatch) {
     personInnerVoices[speakerName] = localVoiceMatch[1].trim();
-    cleanText = cleanText.replace(/\[心声[:：]\s*[\s\S]*?\]/i, '').trim();
 }
 let turnInnerVoice = personInnerVoices[speakerName] || null;
 
@@ -988,6 +987,10 @@ if (i === 0) {
 let timeHtml = `<div class="chat-time-stamp" ${['voice', 'redpacket', 'location', 'diary_invite', 'forward_card'].includes(msgType) ? 'style="display:none;"' : ''}>${tStr}</div>`;
             let innerTimeHtml = `<div class="chat-time-stamp" style="margin: 0 4px; align-self: flex-end; padding-bottom: 2px;">${tStr}</div>`;
             let formattedCleanText = (cleanText || '').replace(/\[(?:译|翻译|EN|En|Eng)[:：]\s*([\s\S]*?)\]/gi, '<div class="bilingual-trans">$1</div>');
+
+// ★ 新增：将气泡里的 [心声: xxx] 标签直接转化为好看的内心独白样式
+formattedCleanText = formattedCleanText.replace(/\[心声[:：]\s*([\s\S]*?)\]/gi, '<div style="color: #8BA888; font-size: 12.5px; font-style: italic; font-weight: bold; margin-bottom: 4px; border-bottom: 1px dashed rgba(139,168,136,0.3); padding-bottom: 2px;">💭 $1</div>');
+
 formattedCleanText = formattedCleanText.replace(/\[图片[:：]\s*([\s\S]*?)\]/gi, '<div class="fake-img-card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div class="fake-img-desc">$1</div></div>');
 
             let isPureStickerAPI = false;
